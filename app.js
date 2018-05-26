@@ -13,18 +13,16 @@ var db = pgp('postgres://bbansavage:pass@localhost:5432/ht_data_collector');
 
 var app = express();
 
-
-
-const gameData = {};
+var gameData = {};
 
 populateGameData = (gameUrl) => {
 
-  axios.get('https://www.basketball-reference.com/boxscores/pbp/201804070CHI.html')
+  axios.get('https://www.basketball-reference.com/boxscores/pbp/' + gameUrl)
     .then(res => {
       let $ = cheerio.load(res.data);
       let cells = $('#pbp tbody').find('td');
-      console.log(cells.length);
-      var halfData = {
+      console.log('26', cells.length);
+      let halfData = {
         road: {
           twosMade: 0,
           twosAtt: 0,
@@ -104,14 +102,39 @@ populateGameData = (gameUrl) => {
             }
             // record first half data at start of 2nd half
             else if (value === 'Start of 3rd quarter') {
-              gameData.firstHalf = Object.create(halfData);
+              gameData.firstHalf = halfData;
+              // how do I avoid resetting the object...
+              halfData =         
+                {road: {
+                  twosMade: 0,
+                  twosAtt: 0,
+                  threesMade: 0,
+                  threesAtt: 0,
+                  ftMade: 0,
+                  ftAtt: 0,
+                  oReb: 0,
+                  dReb: 0,
+                  ast: 0,
+                  tov: 0
+                },
+                home: {
+                  twosMade: 0,
+                  twosAtt: 0,
+                  threesMade: 0,
+                  threesAtt: 0,
+                  ftMade: 0,
+                  ftAtt: 0,
+                  oReb: 0,
+                  dReb: 0,
+                  ast: 0,
+                  tov: 0
+                }}
             }
           }
           j++;
         }
       }
       gameData.secondHalf = halfData;
-      // console.log(gameData);
     })
     .then(() => {
       axios.get('https://www.basketball-reference.com/boxscores/201804070CHI.html')
@@ -120,25 +143,20 @@ populateGameData = (gameUrl) => {
           gamePlayerMinutes = {};
           let roadTeamAbbrv = 'brk';
           let homeTeamAbbrv = 'chi';
-          // let roadTable = $(`#box_${roadTeamAbbrv}_basic tbody`).children('tr').first()
           gamePlayerMinutes.road = populatePlayerMinutes($(`#box_${roadTeamAbbrv}_basic tbody`).children('tr'));
           gamePlayerMinutes.home = populatePlayerMinutes($(`#box_${homeTeamAbbrv}_basic tbody`).children('tr'));
-          // console.log('123', row.children[0].attribs.csk)
-          // console.log('125', row.children[1].children[0].data)
-          console.log(gamePlayerMinutes)
           gameData.playerMinutes = gamePlayerMinutes;
         })
+        .then(() => {
+          console.log('goodData', gameData)
+        })
     })
-  console.log(gameData)
 }
 
 populatePlayerMinutes = (teamTable) => {
   teamMinutes = {};
   for (i = 0; i < teamTable.length; i++) {
-
     if (teamTable[i].children[0].attribs) {
-      console.log(teamTable[i].children[0].attribs.csk)
-      console.log(teamTable[i].children[1].children[0].data)
       let minutes = 0;
       if (teamTable[i].children[1].children[0].data !== 'Did Not Play') {
         minutes = teamTable[i].children[1].children[0].data;
@@ -149,11 +167,10 @@ populatePlayerMinutes = (teamTable) => {
       teamMinutes[teamTable[i].children[0].attribs.csk] = minutes;
     }
   }
-  console.log(teamMinutes)
   return teamMinutes;
 }
 
-populateGameData();
+populateGameData('201804070CHI.html');
 
 app.use(logger('dev'));
 app.use(express.json());
