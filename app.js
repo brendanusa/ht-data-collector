@@ -22,28 +22,28 @@ populateGameData = (gameUrl) => {
       let $ = cheerio.load(res.data);
       let cells = $('#pbp tbody').find('td');
       console.log('26', cells.length);
-      let halfData = {
-        road: {
-          twosMade: 0,
-          twosAtt: 0,
-          threesMade: 0,
-          threesAtt: 0,
-          ftMade: 0,
-          ftAtt: 0,
-          oReb: 0,
-          dReb: 0,
+      let halfData =         
+        {road: {
+          twosmade: 0,
+          twosatt: 0,
+          threesmade: 0,
+          threesatt: 0,
+          ftmade: 0,
+          ftatt: 0,
+          oreb: 0,
+          dreb: 0,
           ast: 0,
           tov: 0
         },
         home: {
-          twosMade: 0,
-          twosAtt: 0,
-          threesMade: 0,
-          threesAtt: 0,
-          ftMade: 0,
-          ftAtt: 0,
-          oReb: 0,
-          dReb: 0,
+          twosmade: 0,
+          twosatt: 0,
+          threesmade: 0,
+          threesatt: 0,
+          ftmade: 0,
+          ftatt: 0,
+          oreb: 0,
+          dreb: 0,
           ast: 0,
           tov: 0
         }
@@ -65,96 +65,108 @@ populateGameData = (gameUrl) => {
             }
             // identify and log events
             else if (value.indexOf('makes 2-pt shot') !== -1) {
-              halfData[eventTeam].twosMade++;
-              halfData[eventTeam].twosAtt++;
+              halfData[eventTeam].twosmade++;
+              halfData[eventTeam].twosatt++;
               if (value.indexOf('assist by') !== -1) {
                 halfData[eventTeam].ast++;
               }
             }
             else if (value.indexOf('misses 2-pt shot') !== -1) {
-              halfData[eventTeam].twosAtt++;
+              halfData[eventTeam].twosatt++;
             }
             else if (value.indexOf('makes 3-pt shot') !== -1) {
-              halfData[eventTeam].threesMade++;
-              halfData[eventTeam].threesAtt++;
+              halfData[eventTeam].threesmade++;
+              halfData[eventTeam].threesatt++;
               if (value.indexOf('assist by') !== -1) {
                 halfData[eventTeam].ast++;
               }
             }
             else if (value.indexOf('misses 3-pt shot') !== -1) {
-              halfData[eventTeam].threesAtt++;
+              halfData[eventTeam].threesatt++;
             }
             else if (value.indexOf('Defensive rebound') !== -1) {
-              halfData[eventTeam].dReb++;
+              halfData[eventTeam].dreb++;
             }
             else if (value.indexOf('Offensive rebound') !== -1) {
-              halfData[eventTeam].oReb++;
+              halfData[eventTeam].oreb++;
             }
             if (value.indexOf('makes free throw') !== -1) {
-              halfData[eventTeam].ftMade++;
-              halfData[eventTeam].ftAtt++;
+              halfData[eventTeam].ftmade++;
+              halfData[eventTeam].ftatt++;
             }
             if (value.indexOf('misses free throw') !== -1) {
-              halfData[eventTeam].ftAtt++;
+              halfData[eventTeam].ftatt++;
             }
             if (value.indexOf('Turnover') !== -1) {
               halfData[eventTeam].tov++;
             }
             // record first half data at start of 2nd half
             else if (value === 'Start of 3rd quarter') {
-              gameData.firstHalf = halfData;
-              // how do I avoid resetting the object...
+              for (var key in halfData.road) {
+                gameData['hfh' + key] = halfData.road[key];
+              }
+              for (var key in halfData.home) {
+                gameData['rfh' + key] = halfData.home[key];
+              }
+              // how can you avoid resetting the object...
               halfData =         
                 {road: {
-                  twosMade: 0,
-                  twosAtt: 0,
-                  threesMade: 0,
-                  threesAtt: 0,
-                  ftMade: 0,
-                  ftAtt: 0,
-                  oReb: 0,
-                  dReb: 0,
+                  twosmade: 0,
+                  twosatt: 0,
+                  threesmade: 0,
+                  threesatt: 0,
+                  ftmade: 0,
+                  ftatt: 0,
+                  oreb: 0,
+                  dreb: 0,
                   ast: 0,
                   tov: 0
                 },
                 home: {
-                  twosMade: 0,
-                  twosAtt: 0,
-                  threesMade: 0,
-                  threesAtt: 0,
-                  ftMade: 0,
-                  ftAtt: 0,
-                  oReb: 0,
-                  dReb: 0,
+                  twosmade: 0,
+                  twosatt: 0,
+                  threesmade: 0,
+                  threesatt: 0,
+                  ftmade: 0,
+                  ftatt: 0,
+                  oreb: 0,
+                  dreb: 0,
                   ast: 0,
                   tov: 0
-                }}
+                }
+              }
             }
           }
           j++;
         }
       }
-      gameData.secondHalf = halfData;
+      for (var key in halfData.road) {
+        gameData['hsh' + key] = halfData.road[key];
+      }
+      for (var key in halfData.home) {
+        gameData['rsh' + key] = halfData.home[key];
+      }
     })
-    .then(() => {
-      axios.get('https://www.basketball-reference.com/boxscores/201804070CHI.html')
-        .then(res => {
-          $ = cheerio.load(res.data);
-          gamePlayerMinutes = {};
-          let roadTeamAbbrv = 'brk';
-          let homeTeamAbbrv = 'chi';
-          gamePlayerMinutes.road = populatePlayerMinutes($(`#box_${roadTeamAbbrv}_basic tbody`).children('tr'));
-          gamePlayerMinutes.home = populatePlayerMinutes($(`#box_${homeTeamAbbrv}_basic tbody`).children('tr'));
-          gameData.playerMinutes = gamePlayerMinutes;
-        })
+    // can't figure out how to send array to db
+    // .then(() => {
+    //   axios.get('https://www.basketball-reference.com/boxscores/201804070CHI.html')
+    //     .then(res => {
+    //       $ = cheerio.load(res.data);
+    //       let roadTeamAbbrv = 'brk';
+    //       let homeTeamAbbrv = 'chi';
+    //       let roadminutes = populatePlayerMinutes($(`#box_${roadTeamAbbrv}_basic tbody`).children('tr'));
+    //       const queryString = 'insert into test (rminutes) values ()';
+    //       db.query(queryString);
+    //     })
         .then(() => {
+          db.query('INSERT INTO test(${this:name}) VALUES(${this:csv})', gameData);
           console.log('goodData', gameData)
         })
-    })
+    // })
 }
 
 populatePlayerMinutes = (teamTable) => {
-  teamMinutes = {};
+  teamMinutes = '[';
   for (i = 0; i < teamTable.length; i++) {
     if (teamTable[i].children[0].attribs) {
       let minutes = 0;
@@ -164,9 +176,20 @@ populatePlayerMinutes = (teamTable) => {
         seconds = seconds.toFixed();
         minutes = parseFloat(minutes.split(':')[0] + '.' + seconds);
       }
-      teamMinutes[teamTable[i].children[0].attribs.csk] = minutes;
+      // remove escaped apostrophes
+      let name = teamTable[i].children[0].attribs.csk.replace('\'', '');
+      name = name.replace(',', '-')
+      teamMinutes += '"'
+      teamMinutes += name
+      teamMinutes += '",'
+      teamMinutes += minutes
+      teamMinutes += ','
+      // teamMinutes.push(name)
+      // teamMinutes.push(minutes);
     }
   }
+  teamMinutes = teamMinutes.slice(0, -1);
+  teamMinutes += ']'
   return teamMinutes;
 }
 
