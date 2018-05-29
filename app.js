@@ -193,7 +193,54 @@ populatePlayerMinutes = (teamTable) => {
   return teamMinutes;
 }
 
-populateGameData('201804070CHI.html');
+const gameUrls = [];
+
+const date = {month: '10', day: '17', year: '2017'}
+
+populateGameUrls = () => {
+
+  console.log('newdate', date)
+
+  axios.get(`https://www.basketball-reference.com/boxscores/?month=${date.month}&day=${date.day}&year=${date.year}`)
+    .then(res => {
+      $ = cheerio.load(res.data);
+      let links = $('.game_summaries .links a');
+      if (links.length > 0) {
+        i = 0;
+        while (i < links.length) {
+          gameUrls.push(links[i].attribs.href.slice(-17));
+          i += 3;
+        }
+      }
+    })
+    .then(() => {
+      if (date.day === '31') {
+        if (date.month === '12') {
+          date.year = '2018';
+          date.month = '1';
+        } else {
+          date.month = (parseInt(date.month) + 1).toString();
+        }
+        date.day = '1';
+      } else {
+        date.day = (parseInt(date.day) + 1).toString();
+      }
+      if (date.month === '4' && date.day === '11') {
+        console.log('ALL DONE!', gameUrls)
+      } else {
+        delayedPopulateGameUrls();
+      }
+    })
+
+}
+
+delayedPopulateGameUrls = () => {
+  setTimeout(populateGameUrls, 10000)
+}
+
+populateGameUrls();
+
+// populateGameData('201804070CHI.html');
 
 app.use(logger('dev'));
 app.use(express.json());
