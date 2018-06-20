@@ -13,42 +13,40 @@ var db = pgp('postgres://bbansavage:pass@localhost:5432/ht_data_collector');
 
 var app = express();
 
-var gameData = {};
+let gameData = {};
+let queryString = '';
+
+const teamHalfData = {
+  twosmade: 0,
+  twosatt: 0,
+  threesmade: 0,
+  threesatt: 0,
+  ftmade: 0,
+  ftatt: 0,
+  oreb: 0,
+  dreb: 0,
+  ast: 0,
+  tov: 0
+}
 
 populateGameData = (gameUrl) => {
+
+  const gameData = {};
+  const roadTeam = {};
+  const homeTeam = {};
 
   axios.get('https://www.basketball-reference.com/boxscores/pbp/' + gameUrl)
     .then(res => {
       let $ = cheerio.load(res.data);
+      roadTeam.name = $('#pbp .thead').children('th')[2].children[0].data;
+      homeTeam.name = $('#pbp .thead').children('th')[6].children[0].data;
       let cells = $('#pbp tbody').find('td');
-      console.log('26', cells.length);
-      let halfData =         
-        {road: {
-          twosmade: 0,
-          twosatt: 0,
-          threesmade: 0,
-          threesatt: 0,
-          ftmade: 0,
-          ftatt: 0,
-          oreb: 0,
-          dreb: 0,
-          ast: 0,
-          tov: 0
-        },
-        home: {
-          twosmade: 0,
-          twosatt: 0,
-          threesmade: 0,
-          threesatt: 0,
-          ftmade: 0,
-          ftatt: 0,
-          oreb: 0,
-          dreb: 0,
-          ast: 0,
-          tov: 0
-        }
-      }
       let eventTeam = '';
+      let halfData = {
+        road: Object.assign({}, teamHalfData),
+        home: Object.assign({}, teamHalfData)
+      }
+      // console.log('43', halfData);
       let j;
       for (let i = 0; i < cells.length; i++) {
         j = 0;
@@ -108,32 +106,9 @@ populateGameData = (gameUrl) => {
               for (var key in halfData.home) {
                 gameData['rfh' + key] = halfData.home[key];
               }
-              // how can you avoid resetting the object...
-              halfData =         
-                {road: {
-                  twosmade: 0,
-                  twosatt: 0,
-                  threesmade: 0,
-                  threesatt: 0,
-                  ftmade: 0,
-                  ftatt: 0,
-                  oreb: 0,
-                  dreb: 0,
-                  ast: 0,
-                  tov: 0
-                },
-                home: {
-                  twosmade: 0,
-                  twosatt: 0,
-                  threesmade: 0,
-                  threesatt: 0,
-                  ftmade: 0,
-                  ftatt: 0,
-                  oreb: 0,
-                  dreb: 0,
-                  ast: 0,
-                  tov: 0
-                }
+              halfData = {
+                road: Object.assign({}, teamHalfData),
+                home: Object.assign({}, teamHalfData)
               }
             }
           }
@@ -146,28 +121,47 @@ populateGameData = (gameUrl) => {
       for (var key in halfData.home) {
         gameData['rsh' + key] = halfData.home[key];
       }
+      // console.log('125', gameData)
+      // db.query('INSERT INTO test (${this:name}) VALUES (${this:csv}) RETURNING id', gameData);
     })
-    // can't figure out how to send array to db
-    // .then(() => {
-    //   axios.get('https://www.basketball-reference.com/boxscores/201804070CHI.html')
-    //     .then(res => {
-    //       $ = cheerio.load(res.data);
-    //       let roadTeamAbbrv = 'brk';
-    //       let homeTeamAbbrv = 'chi';
-    //       let roadminutes = populatePlayerMinutes($(`#box_${roadTeamAbbrv}_basic tbody`).children('tr'));
-    //       const queryString = 'insert into test (rminutes) values ()';
-    //       db.query(queryString);
-    //     })
-        .then(() => {
-          db.query('INSERT INTO test(${this:name}) VALUES(${this:csv})', gameData);
-          console.log('goodData', gameData)
+    .then(() => {
+      console.log('130', roadTeam.name, homeTeam.name)
+      queryString = `INSERT into teams (name) values ('${roadTeam.name}'), ('${homeTeam.name}') on conflict (name) do nothing;`;
+      db.query(queryString)
+    })
+    .then(() => {
+      queryString = `SELECT id from teams where name = '${roadTeam.name}';` 
+      return db.query(queryString)
+    })
+    .then((result) => {
+      roadTeam.id = result;
+      queryString = `SELECT id from teams where name = '${homeTeam.name}';` 
+      return db.query(queryString)
+    })
+    .then((result) => {
+      homeTeam.id = result;
+      console.log('145', roadTeam.id, homeTeam.id)
+      axios.get('https://www.basketball-reference.com/boxscores/' + gameUrl)
+        .then(res => {
+          $ = cheerio.load(res.data);
+          let teamAbbrvContainer = $('#all_line_score').children('.placeholder')[0].next.next.data;
+          roadTeam.abbrv = teamAbbrvContainer.split('.html">')[1].slice(0, 3).toLowerCase();
+          homeTeam.abbrv = teamAbbrvContainer.split('.html">')[2].slice(0, 3).toLowerCase();
+          let roadminutes = populatePlayerMinutes($(`#box_${roadTeam.abbrv}_basic tbody`).children('tr'));
+          // const queryString = `INSERT INTO test (rminutes) values (${roadminutes});`;
+          // console.log('133', queryString)
+          // db.query(queryString);
         })
-    // })
+        // .then(() => {
+        //   return db.query('select rminutes from test where id = 16;');
+        // })
+    })
 }
 
 populatePlayerMinutes = (teamTable) => {
   teamMinutes = '[';
   for (i = 0; i < teamTable.length; i++) {
+    // console.log('167', teamTable[i].children[0].attribs)
     if (teamTable[i].children[0].attribs) {
       let minutes = 0;
       if (teamTable[i].children[1].children[0].data !== 'Did Not Play') {
@@ -179,9 +173,9 @@ populatePlayerMinutes = (teamTable) => {
       // remove escaped apostrophes
       let name = teamTable[i].children[0].attribs.csk.replace('\'', '');
       name = name.replace(',', '-')
-      teamMinutes += '"'
+      teamMinutes += '\''
       teamMinutes += name
-      teamMinutes += '",'
+      teamMinutes += '\','
       teamMinutes += minutes
       teamMinutes += ','
       // teamMinutes.push(name)
@@ -193,9 +187,9 @@ populatePlayerMinutes = (teamTable) => {
   return teamMinutes;
 }
 
-const gameUrls = [];
+let gameUrls = '';
 
-const date = {month: '10', day: '17', year: '2017'}
+const date = {month: '3', day: '1', year: '2018'}
 
 populateGameUrls = () => {
 
@@ -208,7 +202,8 @@ populateGameUrls = () => {
       if (links.length > 0) {
         i = 0;
         while (i < links.length) {
-          gameUrls.push(links[i].attribs.href.slice(-17));
+          gameUrls += links[i].attribs.href.slice(-17);
+          gameUrls += ',';
           i += 3;
         }
       }
@@ -225,8 +220,8 @@ populateGameUrls = () => {
       } else {
         date.day = (parseInt(date.day) + 1).toString();
       }
-      if (date.month === '4' && date.day === '11') {
-        console.log('ALL DONE!', gameUrls)
+      if (date.month === '4' && date.day === '12') {
+        console.log('ALL DONE!', gameUrls.slice(0, -1))
       } else {
         delayedPopulateGameUrls();
       }
@@ -238,9 +233,9 @@ delayedPopulateGameUrls = () => {
   setTimeout(populateGameUrls, 10000)
 }
 
-populateGameUrls();
+// populateGameUrls();
 
-// populateGameData('201804070CHI.html');
+populateGameData('201804070CHI.html');
 
 app.use(logger('dev'));
 app.use(express.json());
