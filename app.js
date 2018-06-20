@@ -31,9 +31,10 @@ const teamHalfData = {
 
 populateGameData = (gameUrl) => {
 
-  const gameData = {};
+  const gameData = { date: gameUrl.slice(0, 9) };
   const roadTeam = {};
   const homeTeam = {};
+  let gameId;
 
   axios.get('https://www.basketball-reference.com/boxscores/pbp/' + gameUrl)
     .then(res => {
@@ -121,48 +122,53 @@ populateGameData = (gameUrl) => {
       for (var key in halfData.home) {
         gameData['rsh' + key] = halfData.home[key];
       }
-      // console.log('125', gameData)
-      // db.query('INSERT INTO test (${this:name}) VALUES (${this:csv}) RETURNING id', gameData);
-    })
-    .then(() => {
-      console.log('130', roadTeam.name, homeTeam.name)
+      console.log('125', gameData)
       queryString = `INSERT into teams (name) values ('${roadTeam.name}'), ('${homeTeam.name}') on conflict (name) do nothing;`;
-      db.query(queryString)
+      return db.query(queryString)
     })
     .then(() => {
       queryString = `SELECT id from teams where name = '${roadTeam.name}';` 
       return db.query(queryString)
     })
-    .then((result) => {
-      roadTeam.id = result;
+    .then((res) => {
+      roadTeam.id = res[0].id;
       queryString = `SELECT id from teams where name = '${homeTeam.name}';` 
       return db.query(queryString)
     })
-    .then((result) => {
-      homeTeam.id = result;
-      console.log('145', roadTeam.id, homeTeam.id)
+    .then((res) => {
+      homeTeam.id = res[0].id;
+      gameData.hteam_id = homeTeam.id;
+      gameData.rteam_id = roadTeam.id;
+      return db.query('INSERT INTO games (${this:name}) VALUES (${this:csv}) RETURNING id', gameData);
+    })
+    .then((res) => {
+      gameId = res[0].id;
       axios.get('https://www.basketball-reference.com/boxscores/' + gameUrl)
         .then(res => {
           $ = cheerio.load(res.data);
           let teamAbbrvContainer = $('#all_line_score').children('.placeholder')[0].next.next.data;
           roadTeam.abbrv = teamAbbrvContainer.split('.html">')[1].slice(0, 3).toLowerCase();
           homeTeam.abbrv = teamAbbrvContainer.split('.html">')[2].slice(0, 3).toLowerCase();
-          let roadminutes = populatePlayerMinutes($(`#box_${roadTeam.abbrv}_basic tbody`).children('tr'));
-          // const queryString = `INSERT INTO test (rminutes) values (${roadminutes});`;
-          // console.log('133', queryString)
-          // db.query(queryString);
+          console.log('154', homeTeam)
+          recordAllPlayerAppearances($(`#box_${roadTeam.abbrv}_basic tbody`).children('tr'), roadTeam.id, $(`#box_${homeTeam.abbrv}_basic tbody`).children('tr'), homeTeam.id, gameId);
         })
-        // .then(() => {
-        //   return db.query('select rminutes from test where id = 16;');
-        // })
     })
 }
 
-populatePlayerMinutes = (teamTable) => {
-  teamMinutes = '[';
-  for (i = 0; i < teamTable.length; i++) {
-    // console.log('167', teamTable[i].children[0].attribs)
-    if (teamTable[i].children[0].attribs) {
+
+recordAllPlayerAppearances = (roadTeamTable, roadTeamId, homeTeamTable, homeTeamId, gameId) => {
+
+  let currentTeam = 'road';
+
+  recordOnePlayerAppearance = (i, teamTable, teamId) => {
+    if (i === teamTable.length) {
+      if (currentTeam === 'road') {
+        currentTeam = 'home'
+        return recordOnePlayerAppearance(0, homeTeamTable, homeTeamId);
+      } else {
+        return 'done!';
+      }
+    } else if (teamTable[i] && teamTable[i].children[0].attribs) {
       let minutes = 0;
       if (teamTable[i].children[1].children[0].data !== 'Did Not Play') {
         minutes = teamTable[i].children[1].children[0].data;
@@ -173,18 +179,21 @@ populatePlayerMinutes = (teamTable) => {
       // remove escaped apostrophes
       let name = teamTable[i].children[0].attribs.csk.replace('\'', '');
       name = name.replace(',', '-')
-      teamMinutes += '\''
-      teamMinutes += name
-      teamMinutes += '\','
-      teamMinutes += minutes
-      teamMinutes += ','
-      // teamMinutes.push(name)
-      // teamMinutes.push(minutes);
+      db.query(`INSERT into players (name) values ('${name}') on conflict (name) do nothing;`)
+        .then(() => {
+          return db.query(`SELECT id from players where name = '${name}';`)
+        })
+        .then((res) => {
+          return db.query(`INSERT into appearances (player_id, team_id, game_id, minutes) VALUES ('${res[0].id}', '${teamId}', '${gameId}', '${minutes}') RETURNING id;`)
+        })
+        .then((id) => {
+          return recordOnePlayerAppearance(i + 1, teamTable, teamId);
+        })
+    } else {
+      return recordOnePlayerAppearance(i + 1, teamTable, teamId);
     }
   }
-  teamMinutes = teamMinutes.slice(0, -1);
-  teamMinutes += ']'
-  return teamMinutes;
+  return recordOnePlayerAppearance(0, roadTeamTable, roadTeamId);
 }
 
 let gameUrls = '';
@@ -230,7 +239,7 @@ populateGameUrls = () => {
 }
 
 delayedPopulateGameUrls = () => {
-  setTimeout(populateGameUrls, 10000)
+  setTimeout(populateGameUrls, 12000)
 }
 
 // populateGameUrls();
