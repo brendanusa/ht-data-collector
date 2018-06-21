@@ -4,6 +4,7 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 const cheerio = require('cheerio');
 const axios = require('axios');
+const gameUrls = require('./gameUrls.js');
 
 // var indexRouter = require('./routes/index');
 // var usersRouter = require('./routes/users');
@@ -29,8 +30,19 @@ const teamHalfData = {
   tov: 0
 }
 
-populateGameData = (gameUrl) => {
+const currentGameUrls = gameUrls['oct-nov'];
+let gameIndex = -1;
 
+populateGameData = () => {
+
+  gameIndex++;
+
+  if (gameIndex === currentGameUrls.length) {
+    return console.log('DONE!')
+  }
+
+  const gameUrl = currentGameUrls[gameIndex];
+  console.log('index', gameIndex, 'game', gameUrl)
   const gameData = { date: gameUrl.slice(0, 9) };
   const roadTeam = {};
   const homeTeam = {};
@@ -122,7 +134,6 @@ populateGameData = (gameUrl) => {
       for (var key in halfData.home) {
         gameData['rsh' + key] = halfData.home[key];
       }
-      console.log('125', gameData)
       queryString = `INSERT into teams (name) values ('${roadTeam.name}'), ('${homeTeam.name}') on conflict (name) do nothing;`;
       return db.query(queryString)
     })
@@ -149,12 +160,12 @@ populateGameData = (gameUrl) => {
           let teamAbbrvContainer = $('#all_line_score').children('.placeholder')[0].next.next.data;
           roadTeam.abbrv = teamAbbrvContainer.split('.html">')[1].slice(0, 3).toLowerCase();
           homeTeam.abbrv = teamAbbrvContainer.split('.html">')[2].slice(0, 3).toLowerCase();
-          console.log('154', homeTeam)
           recordAllPlayerAppearances($(`#box_${roadTeam.abbrv}_basic tbody`).children('tr'), roadTeam.id, $(`#box_${homeTeam.abbrv}_basic tbody`).children('tr'), homeTeam.id, gameId);
+          console.log('game data recorded!')
+          delayedPopulateGameData();
         })
     })
 }
-
 
 recordAllPlayerAppearances = (roadTeamTable, roadTeamId, homeTeamTable, homeTeamId, gameId) => {
 
@@ -195,8 +206,6 @@ recordAllPlayerAppearances = (roadTeamTable, roadTeamId, homeTeamTable, homeTeam
   }
   return recordOnePlayerAppearance(0, roadTeamTable, roadTeamId);
 }
-
-let gameUrls = '';
 
 const date = {month: '3', day: '1', year: '2018'}
 
@@ -242,9 +251,15 @@ delayedPopulateGameUrls = () => {
   setTimeout(populateGameUrls, 12000)
 }
 
+delayedPopulateGameData = () => {
+  setTimeout(populateGameData, 12000)
+}
+
 // populateGameUrls();
 
-populateGameData('201804070CHI.html');
+// populateGameData('201804070CHI.html');
+
+populateGameData()
 
 app.use(logger('dev'));
 app.use(express.json());
