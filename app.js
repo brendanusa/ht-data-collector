@@ -30,7 +30,7 @@ const teamHalfData = {
   tov: 0
 }
 
-const currentGameUrls = gameUrls['oct-nov'];
+const currentGameUrls = gameUrls['mar-apr'];
 let gameIndex = -1;
 
 populateGameData = () => {
@@ -41,14 +41,14 @@ populateGameData = () => {
     return console.log('DONE!')
   }
 
-  const gameUrl = currentGameUrls[gameIndex];
-  console.log('index', gameIndex, 'game', gameUrl)
-  const gameData = { date: gameUrl.slice(0, 9) };
+  const gameData = { url: currentGameUrls[gameIndex] };
+  console.log('index', gameIndex, 'game', gameData.url)
+
   const roadTeam = {};
   const homeTeam = {};
   let gameId;
 
-  axios.get('https://www.basketball-reference.com/boxscores/pbp/' + gameUrl)
+  axios.get('https://www.basketball-reference.com/boxscores/pbp/' + gameData.url)
     .then(res => {
       let $ = cheerio.load(res.data);
       roadTeam.name = $('#pbp .thead').children('th')[2].children[0].data;
@@ -59,7 +59,6 @@ populateGameData = () => {
         road: Object.assign({}, teamHalfData),
         home: Object.assign({}, teamHalfData)
       }
-      // console.log('43', halfData);
       let j;
       for (let i = 0; i < cells.length; i++) {
         j = 0;
@@ -111,7 +110,7 @@ populateGameData = () => {
             if (value.indexOf('Turnover') !== -1) {
               halfData[eventTeam].tov++;
             }
-            // record first half data at start of 2nd half
+            // save first half data at start of 2nd half
             else if (value === 'Start of 3rd quarter') {
               for (var key in halfData.road) {
                 gameData['hfh' + key] = halfData.road[key];
@@ -119,6 +118,7 @@ populateGameData = () => {
               for (var key in halfData.home) {
                 gameData['rfh' + key] = halfData.home[key];
               }
+              // reset halfData obj
               halfData = {
                 road: Object.assign({}, teamHalfData),
                 home: Object.assign({}, teamHalfData)
@@ -137,31 +137,35 @@ populateGameData = () => {
       queryString = `INSERT into teams (name) values ('${roadTeam.name}'), ('${homeTeam.name}') on conflict (name) do nothing;`;
       return db.query(queryString)
     })
+    // fetch team ids
     .then(() => {
       queryString = `SELECT id from teams where name = '${roadTeam.name}';` 
       return db.query(queryString)
     })
     .then((res) => {
       roadTeam.id = res[0].id;
+      gameData.rteam_id = roadTeam.id;
       queryString = `SELECT id from teams where name = '${homeTeam.name}';` 
       return db.query(queryString)
     })
     .then((res) => {
       homeTeam.id = res[0].id;
       gameData.hteam_id = homeTeam.id;
-      gameData.rteam_id = roadTeam.id;
       return db.query('INSERT INTO games (${this:name}) VALUES (${this:csv}) RETURNING id', gameData);
     })
     .then((res) => {
       gameId = res[0].id;
-      axios.get('https://www.basketball-reference.com/boxscores/' + gameUrl)
+      axios.get('https://www.basketball-reference.com/boxscores/' + gameData.url)
         .then(res => {
           $ = cheerio.load(res.data);
+          // fetch team abbrevs to select table rows
           let teamAbbrvContainer = $('#all_line_score').children('.placeholder')[0].next.next.data;
           roadTeam.abbrv = teamAbbrvContainer.split('.html">')[1].slice(0, 3).toLowerCase();
           homeTeam.abbrv = teamAbbrvContainer.split('.html">')[2].slice(0, 3).toLowerCase();
+          // scrape and store player minutes
           recordAllPlayerAppearances($(`#box_${roadTeam.abbrv}_basic tbody`).children('tr'), roadTeam.id, $(`#box_${homeTeam.abbrv}_basic tbody`).children('tr'), homeTeam.id, gameId);
           console.log('game data recorded!')
+          // restart after delay
           delayedPopulateGameData();
         })
     })
@@ -173,6 +177,7 @@ recordAllPlayerAppearances = (roadTeamTable, roadTeamId, homeTeamTable, homeTeam
 
   recordOnePlayerAppearance = (i, teamTable, teamId) => {
     if (i === teamTable.length) {
+      // after last player, switch to home team or return
       if (currentTeam === 'road') {
         currentTeam = 'home'
         return recordOnePlayerAppearance(0, homeTeamTable, homeTeamId);
@@ -180,14 +185,16 @@ recordAllPlayerAppearances = (roadTeamTable, roadTeamId, homeTeamTable, homeTeam
         return 'done!';
       }
     } else if (teamTable[i] && teamTable[i].children[0].attribs) {
+      // presence of row attribs indicates player
       let minutes = 0;
       if (teamTable[i].children[1].children[0].data !== 'Did Not Play') {
         minutes = teamTable[i].children[1].children[0].data;
+        // convert MM:SS to mins
         let seconds = parseInt(minutes.split(':')[1]) * 1.667;
         seconds = seconds.toFixed();
         minutes = parseFloat(minutes.split(':')[0] + '.' + seconds);
       }
-      // remove escaped apostrophes
+      // remove escaped apostrophes and commas from name
       let name = teamTable[i].children[0].attribs.csk.replace('\'', '');
       name = name.replace(',', '-')
       db.query(`INSERT into players (name) values ('${name}') on conflict (name) do nothing;`)
@@ -195,15 +202,18 @@ recordAllPlayerAppearances = (roadTeamTable, roadTeamId, homeTeamTable, homeTeam
           return db.query(`SELECT id from players where name = '${name}';`)
         })
         .then((res) => {
-          return db.query(`INSERT into appearances (player_id, team_id, game_id, minutes) VALUES ('${res[0].id}', '${teamId}', '${gameId}', '${minutes}') RETURNING id;`)
+          return db.query(`INSERT into appearances (player_id, team_id, game_id, minutes) VALUES ('${res[0].id}', '${teamId}', '${gameId}', '${minutes}');`)
         })
-        .then((id) => {
+        .then(() => {
+          // run for next row
           return recordOnePlayerAppearance(i + 1, teamTable, teamId);
         })
     } else {
+      // run for next row
       return recordOnePlayerAppearance(i + 1, teamTable, teamId);
     }
   }
+  // run for road team first
   return recordOnePlayerAppearance(0, roadTeamTable, roadTeamId);
 }
 
@@ -211,7 +221,7 @@ const date = {month: '3', day: '1', year: '2018'}
 
 populateGameUrls = () => {
 
-  console.log('newdate', date)
+  console.log('nextdate', date)
 
   axios.get(`https://www.basketball-reference.com/boxscores/?month=${date.month}&day=${date.day}&year=${date.year}`)
     .then(res => {

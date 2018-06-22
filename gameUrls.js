@@ -16,6 +16,6 @@ gameUrls.jan = janStr.split(',');
 gameUrls.feb = febStr.split(',');
 gameUrls['mar-apr'] = marAprStr.split(',');
 
-console.log(gameUrls['oct-nov'].length)
+console.log(gameUrls['mar-apr'].length)
 
 module.exports = gameUrls;
